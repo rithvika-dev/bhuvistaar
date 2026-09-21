@@ -1,0 +1,1 @@
+{"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"khasra_no": "101/A", "owner_name": "Rajesh Sharma", "area_sqm": 1250.5}, "geometry": {"type": "Polygon", "coordinates": [[[73.8567, 18.5204], [73.8577, 18.5204], [73.8577, 18.5214], [73.8567, 18.5214], [73.8567, 18.5204]]]}}]}

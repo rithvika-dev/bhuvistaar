@@ -1,0 +1,430 @@
+{
+  "type": "FeatureCollection",
+  "name": "synthetic_drone_building_footprints",
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "EPSG:4326"
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.47025,
+              17.4002
+            ],
+            [
+              78.47059999999999,
+              17.4002
+            ],
+            [
+              78.47059999999999,
+              17.4005
+            ],
+            [
+              78.47025,
+              17.4005
+            ],
+            [
+              78.47025,
+              17.4002
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "building_id": "B001",
+        "parcel_id": "P001",
+        "land_use": "Residential",
+        "area_sq_m": 120,
+        "survey_year": 2026,
+        "source": "Drone Survey"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.47145,
+              17.40018
+            ],
+            [
+              78.47185,
+              17.40018
+            ],
+            [
+              78.47185,
+              17.400479999999998
+            ],
+            [
+              78.47145,
+              17.400479999999998
+            ],
+            [
+              78.47145,
+              17.40018
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "building_id": "B002",
+        "parcel_id": "P002",
+        "land_use": "Residential",
+        "area_sq_m": 130,
+        "survey_year": 2026,
+        "source": "Drone Survey"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.47255,
+              17.40018
+            ],
+            [
+              78.47305,
+              17.40018
+            ],
+            [
+              78.47305,
+              17.40053
+            ],
+            [
+              78.47255,
+              17.40053
+            ],
+            [
+              78.47255,
+              17.40018
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "building_id": "B003",
+        "parcel_id": "P003",
+        "land_use": "Commercial",
+        "area_sq_m": 260,
+        "survey_year": 2026,
+        "source": "Drone Survey"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.47382,
+              17.4002
+            ],
+            [
+              78.47422,
+              17.4002
+            ],
+            [
+              78.47422,
+              17.4005
+            ],
+            [
+              78.47382,
+              17.4005
+            ],
+            [
+              78.47382,
+              17.4002
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "building_id": "B004",
+        "parcel_id": "P004",
+        "land_use": "Residential",
+        "area_sq_m": 125,
+        "survey_year": 2026,
+        "source": "Drone Survey"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.47142,
+              17.4012
+            ],
+            [
+              78.47182,
+              17.4012
+            ],
+            [
+              78.47182,
+              17.401519999999998
+            ],
+            [
+              78.47142,
+              17.401519999999998
+            ],
+            [
+              78.47142,
+              17.4012
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "building_id": "B005",
+        "parcel_id": "P006",
+        "land_use": "Residential",
+        "area_sq_m": 135,
+        "survey_year": 2026,
+        "source": "Drone Survey"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.47262,
+              17.40118
+            ],
+            [
+              78.47300000000001,
+              17.40118
+            ],
+            [
+              78.47300000000001,
+              17.40148
+            ],
+            [
+              78.47262,
+              17.40148
+            ],
+            [
+              78.47262,
+              17.40118
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "building_id": "B006",
+        "parcel_id": "P007",
+        "land_use": "Residential",
+        "area_sq_m": 145,
+        "survey_year": 2026,
+        "source": "Drone Survey"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.47382,
+              17.40115
+            ],
+            [
+              78.4743,
+              17.40115
+            ],
+            [
+              78.4743,
+              17.401500000000002
+            ],
+            [
+              78.47382,
+              17.401500000000002
+            ],
+            [
+              78.47382,
+              17.40115
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "building_id": "B007",
+        "parcel_id": "P008",
+        "land_use": "Commercial",
+        "area_sq_m": 240,
+        "survey_year": 2026,
+        "source": "Drone Survey"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.4702,
+              17.40218
+            ],
+            [
+              78.47058000000001,
+              17.40218
+            ],
+            [
+              78.47058000000001,
+              17.40248
+            ],
+            [
+              78.4702,
+              17.40248
+            ],
+            [
+              78.4702,
+              17.40218
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "building_id": "B008",
+        "parcel_id": "P009",
+        "land_use": "Residential",
+        "area_sq_m": 115,
+        "survey_year": 2026,
+        "source": "Drone Survey"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.47135,
+              17.4022
+            ],
+            [
+              78.4716,
+              17.4022
+            ],
+            [
+              78.4716,
+              17.40242
+            ],
+            [
+              78.47135,
+              17.40242
+            ],
+            [
+              78.47135,
+              17.4022
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "building_id": "B009",
+        "parcel_id": "P010",
+        "land_use": "Agricultural",
+        "area_sq_m": 70,
+        "survey_year": 2026,
+        "source": "Drone Survey"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.4703,
+              17.40125
+            ],
+            [
+              78.47075,
+              17.40125
+            ],
+            [
+              78.47075,
+              17.40157
+            ],
+            [
+              78.4703,
+              17.40157
+            ],
+            [
+              78.4703,
+              17.40125
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "building_id": "B010",
+        "parcel_id": "P005",
+        "land_use": "Residential",
+        "area_sq_m": 150,
+        "survey_year": 2026,
+        "source": "Drone Survey"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.47195,
+              17.40015
+            ],
+            [
+              78.4727,
+              17.40015
+            ],
+            [
+              78.4727,
+              17.4005
+            ],
+            [
+              78.47195,
+              17.4005
+            ],
+            [
+              78.47195,
+              17.40015
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "building_id": "B011",
+        "parcel_id": "P003",
+        "land_use": "Commercial",
+        "area_sq_m": 300,
+        "survey_year": 2026,
+        "source": "Drone Survey"
+      }
+    }
+  ]
+}

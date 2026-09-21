@@ -1,0 +1,1 @@
+{"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"building_id": "DRONE-B101", "owner": "Rajesh Sharma", "footprint_area": 1245.0}, "geometry": {"type": "Polygon", "coordinates": [[[73.8568, 18.52045], [73.85775, 18.52045], [73.85775, 18.52145], [73.8568, 18.52145], [73.8568, 18.52045]]]}}]}

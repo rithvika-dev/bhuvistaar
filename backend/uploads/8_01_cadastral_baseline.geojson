@@ -1,0 +1,402 @@
+{
+  "type": "FeatureCollection",
+  "name": "synthetic_cadastral_baseline",
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "EPSG:4326"
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.47,
+              17.4
+            ],
+            [
+              78.471,
+              17.4
+            ],
+            [
+              78.471,
+              17.4008
+            ],
+            [
+              78.47,
+              17.4008
+            ],
+            [
+              78.47,
+              17.4
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "parcel_id": "P001",
+        "khasra_no": "KH-1024/1",
+        "owner_name": "Ravi Kumar",
+        "land_use": "Residential",
+        "area_sq_m": 1200,
+        "survey_year": 2020,
+        "source": "Cadastral Baseline"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.4712,
+              17.4
+            ],
+            [
+              78.4722,
+              17.4
+            ],
+            [
+              78.4722,
+              17.4008
+            ],
+            [
+              78.4712,
+              17.4008
+            ],
+            [
+              78.4712,
+              17.4
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "parcel_id": "P002",
+        "khasra_no": "KH-1024/2",
+        "owner_name": "Anita Rao",
+        "land_use": "Residential",
+        "area_sq_m": 950,
+        "survey_year": 2020,
+        "source": "Cadastral Baseline"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.4724,
+              17.4
+            ],
+            [
+              78.4734,
+              17.4
+            ],
+            [
+              78.4734,
+              17.4008
+            ],
+            [
+              78.4724,
+              17.4008
+            ],
+            [
+              78.4724,
+              17.4
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "parcel_id": "P003",
+        "khasra_no": "KH-1024/3",
+        "owner_name": "Kiran Reddy",
+        "land_use": "Commercial",
+        "area_sq_m": 1400,
+        "survey_year": 2020,
+        "source": "Cadastral Baseline"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.4736,
+              17.4
+            ],
+            [
+              78.47460000000001,
+              17.4
+            ],
+            [
+              78.47460000000001,
+              17.4008
+            ],
+            [
+              78.4736,
+              17.4008
+            ],
+            [
+              78.4736,
+              17.4
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "parcel_id": "P004",
+        "khasra_no": "KH-1025/1",
+        "owner_name": "Suresh Patel",
+        "land_use": "Residential",
+        "area_sq_m": 1100,
+        "survey_year": 2020,
+        "source": "Cadastral Baseline"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.47,
+              17.401
+            ],
+            [
+              78.471,
+              17.401
+            ],
+            [
+              78.471,
+              17.4018
+            ],
+            [
+              78.47,
+              17.4018
+            ],
+            [
+              78.47,
+              17.401
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "parcel_id": "P005",
+        "khasra_no": "KH-1025/2",
+        "owner_name": "Meena Devi",
+        "land_use": "Agricultural",
+        "area_sq_m": 1500,
+        "survey_year": 2020,
+        "source": "Cadastral Baseline"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.4712,
+              17.401
+            ],
+            [
+              78.4722,
+              17.401
+            ],
+            [
+              78.4722,
+              17.4018
+            ],
+            [
+              78.4712,
+              17.4018
+            ],
+            [
+              78.4712,
+              17.401
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "parcel_id": "P006",
+        "khasra_no": "KH-1025/3",
+        "owner_name": "Arjun Rao",
+        "land_use": "Residential",
+        "area_sq_m": 1000,
+        "survey_year": 2020,
+        "source": "Cadastral Baseline"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.4724,
+              17.401
+            ],
+            [
+              78.4734,
+              17.401
+            ],
+            [
+              78.4734,
+              17.4018
+            ],
+            [
+              78.4724,
+              17.4018
+            ],
+            [
+              78.4724,
+              17.401
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "parcel_id": "P007",
+        "khasra_no": "KH-1026/1",
+        "owner_name": "Lakshmi Bai",
+        "land_use": "Residential",
+        "area_sq_m": 1250,
+        "survey_year": 2020,
+        "source": "Cadastral Baseline"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.4736,
+              17.401
+            ],
+            [
+              78.47460000000001,
+              17.401
+            ],
+            [
+              78.47460000000001,
+              17.4018
+            ],
+            [
+              78.4736,
+              17.4018
+            ],
+            [
+              78.4736,
+              17.401
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "parcel_id": "P008",
+        "khasra_no": "KH-1026/2",
+        "owner_name": "Farooq Ahmed",
+        "land_use": "Commercial",
+        "area_sq_m": 1350,
+        "survey_year": 2020,
+        "source": "Cadastral Baseline"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.47,
+              17.402
+            ],
+            [
+              78.471,
+              17.402
+            ],
+            [
+              78.471,
+              17.402800000000003
+            ],
+            [
+              78.47,
+              17.402800000000003
+            ],
+            [
+              78.47,
+              17.402
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "parcel_id": "P009",
+        "khasra_no": "KH-1026/3",
+        "owner_name": "Naveen Kumar",
+        "land_use": "Residential",
+        "area_sq_m": 1050,
+        "survey_year": 2020,
+        "source": "Cadastral Baseline"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.4712,
+              17.402
+            ],
+            [
+              78.4722,
+              17.402
+            ],
+            [
+              78.4722,
+              17.402800000000003
+            ],
+            [
+              78.4712,
+              17.402800000000003
+            ],
+            [
+              78.4712,
+              17.402
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "parcel_id": "P010",
+        "khasra_no": "KH-1027/1",
+        "owner_name": "Priya Sharma",
+        "land_use": "Agricultural",
+        "area_sq_m": 1600,
+        "survey_year": 2020,
+        "source": "Cadastral Baseline"
+      }
+    }
+  ]
+}

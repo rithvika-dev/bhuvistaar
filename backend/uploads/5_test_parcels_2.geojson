@@ -1,0 +1,75 @@
+{
+  "type": "FeatureCollection",
+  "name": "test_parcels_2",
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "EPSG:4326"
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "parcel_id": "P001",
+        "owner_name": "Ravi Kumar",
+        "land_use": "Residential",
+        "area_sq_m": 1210
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [78.4702, 17.4002],
+            [78.4712, 17.4002],
+            [78.4712, 17.4012],
+            [78.4702, 17.4012],
+            [78.4702, 17.4002]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "parcel_id": "P002",
+        "owner_name": "Anita Rao",
+        "land_use": "Residential",
+        "area_sq_m": 960
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [78.4712, 17.4002],
+            [78.4722, 17.4002],
+            [78.4722, 17.4012],
+            [78.4712, 17.4012],
+            [78.4712, 17.4002]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "parcel_id": "P003",
+        "owner_name": "Kiran Reddy",
+        "land_use": "Commercial",
+        "area_sq_m": 1450
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [78.4730, 17.4030],
+            [78.4742, 17.4030],
+            [78.4742, 17.4042],
+            [78.4730, 17.4042],
+            [78.4730, 17.4030]
+          ]
+        ]
+      }
+    }
+  ]
+}
