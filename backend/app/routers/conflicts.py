@@ -43,7 +43,8 @@ def run_conflict_detection(
     try:
         result = detect_conflicts(
             db=db,
-            project_id=project_id
+            project_id=project_id,
+            user_id=current_user.id
         )
 
         return result

@@ -7,6 +7,7 @@ from app.models.conflict import Conflict
 from app.models.project import Project
 from app.models.user import User
 from app.services.auth_dependency import get_current_user
+from app.services.conflict_service import resolve_conflict as service_resolve_conflict
 
 
 router = APIRouter(
@@ -21,7 +22,7 @@ class ConflictResolutionRequest(BaseModel):
 
 
 @router.put("/{conflict_id}/resolve")
-def resolve_conflict(
+def resolve_conflict_endpoint(
     conflict_id: int,
     request: ConflictResolutionRequest,
     db: Session = Depends(get_db),
@@ -57,30 +58,22 @@ def resolve_conflict(
             detail="You do not have access to this conflict"
         )
 
-    allowed_statuses = {
-        "approved",
-        "rejected",
-        "resolved"
-    }
-
-    if request.resolution_status not in allowed_statuses:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Invalid resolution status. "
-                "Use approved, rejected, or resolved."
-            )
+    try:
+        result = service_resolve_conflict(
+            db=db,
+            conflict_id=conflict_id,
+            resolution_status=request.resolution_status,
+            resolution_notes=request.resolution_notes,
+            user_id=current_user.id
         )
-
-    conflict.resolution_status = request.resolution_status
-    conflict.resolution_notes = request.resolution_notes
-
-    db.commit()
-    db.refresh(conflict)
-
-    return {
-        "message": "Conflict resolution updated successfully",
-        "conflict_id": conflict.id,
-        "resolution_status": conflict.resolution_status,
-        "resolution_notes": conflict.resolution_notes
-    }
+        return {
+            "message": "Conflict resolution updated successfully",
+            "conflict_id": result["conflict_id"],
+            "resolution_status": result["resolution_status"],
+            "resolution_notes": result["resolution_notes"]
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Conflict resolution failed: {str(e)}")

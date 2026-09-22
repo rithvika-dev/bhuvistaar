@@ -15,6 +15,7 @@ MODEL_PATH = os.path.join(
 )
 
 FEATURE_COLUMNS = [
+    "identity_score",
     "spatial_score",
     "attribute_score",
     "geometry_similarity",

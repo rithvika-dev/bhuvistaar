@@ -1,10 +1,11 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 import os
 import joblib
 import pandas as pd
 
 from app.ai.spatial_matcher import find_spatial_matches
-from app.ai.attribute_matcher import find_attribute_matches
+from app.ai.attribute_matcher import compare_attributes, find_attribute_matches
+from app.ai.ml_feature_engineering import build_match_features
 from app.ai.confidence_service import build_confidence_result
 
 
@@ -14,26 +15,34 @@ MODEL_PATH = "processed/ml_models/feature_match_model.pkl"
 def combine_match_scores(
     spatial_score: float,
     attribute_score: float,
-    spatial_weight: float = 0.6,
-    attribute_weight: float = 0.4
+    identity_score: float = 0.5,
+    geometry_similarity: float = 0.0,
+    proximity_score: float = 0.0,
 ) -> float:
-
-    final_score = (
-        spatial_score * spatial_weight
-        + attribute_score * attribute_weight
-    )
+    """
+    Domain-aware fallback score calculation when ML model is not available.
+    """
+    if identity_score == 1.0:
+        # Strong identity anchor
+        final = 0.45 * identity_score + 0.25 * spatial_score + 0.20 * attribute_score + 0.10 * proximity_score
+    elif identity_score == 0.85:
+        final = 0.40 * identity_score + 0.25 * spatial_score + 0.20 * attribute_score + 0.15 * proximity_score
+    elif identity_score == 0.0:
+        # Conflicting identity heavily lowers confidence
+        final = 0.15 * spatial_score + 0.10 * attribute_score
+    else:
+        # Neutral identity (missing) -> spatial & general attributes dominate
+        final = 0.50 * spatial_score + 0.35 * attribute_score + 0.15 * proximity_score
 
     return round(
-        max(0.0, min(1.0, final_score)),
+        max(0.0, min(1.0, float(final))),
         4
     )
 
 
 def load_match_model():
-
     if not os.path.exists(MODEL_PATH):
         return None
-
     try:
         return joblib.load(MODEL_PATH)
     except Exception:
@@ -46,71 +55,57 @@ def calculate_ml_confidence(
     attribute_score: float,
     geometry_similarity: float,
     proximity_score: float,
-    distance: float
+    distance: float,
+    identity_score: float = 0.5
 ) -> float:
-
+    """
+    Calculate final match confidence using trained RandomForest model,
+    falling back to domain-weighted scoring if model is absent or errors.
+    """
     if model is None:
         return combine_match_scores(
             spatial_score=spatial_score,
-            attribute_score=attribute_score
+            attribute_score=attribute_score,
+            identity_score=identity_score,
+            geometry_similarity=geometry_similarity,
+            proximity_score=proximity_score
         )
 
-    distance_score = 1.0 / (
-        1.0 + float(distance or 0.0)
+    features_dict = build_match_features(
+        spatial_score=spatial_score,
+        attribute_score=attribute_score,
+        geometry_similarity=geometry_similarity,
+        proximity_score=proximity_score,
+        distance=distance,
+        identity_score=identity_score
     )
 
-    combined_score = (
-        float(spatial_score or 0.0) * 0.30
-        + float(attribute_score or 0.0) * 0.25
-        + float(geometry_similarity or 0.0) * 0.20
-        + float(proximity_score or 0.0) * 0.15
-        + distance_score * 0.10
-    )
+    feature_cols = [
+        "identity_score",
+        "spatial_score",
+        "attribute_score",
+        "geometry_similarity",
+        "proximity_score",
+        "distance",
+        "distance_score",
+        "combined_score"
+    ]
 
-    features = pd.DataFrame([
-        {
-            "spatial_score": float(
-                spatial_score or 0.0
-            ),
-            "attribute_score": float(
-                attribute_score or 0.0
-            ),
-            "geometry_similarity": float(
-                geometry_similarity or 0.0
-            ),
-            "proximity_score": float(
-                proximity_score or 0.0
-            ),
-            "distance": float(
-                distance or 0.0
-            ),
-            "distance_score": distance_score,
-            "combined_score": combined_score
-        }
-    ])
+    features_df = pd.DataFrame([features_dict])[feature_cols]
 
     try:
-
-        probability = model.predict_proba(
-            features
-        )[0][1]
-
+        probability = model.predict_proba(features_df)[0][1]
         return round(
-            max(
-                0.0,
-                min(
-                    1.0,
-                    float(probability)
-                )
-            ),
+            max(0.0, min(1.0, float(probability))),
             4
         )
-
     except Exception:
-
         return combine_match_scores(
             spatial_score=spatial_score,
-            attribute_score=attribute_score
+            attribute_score=attribute_score,
+            identity_score=identity_score,
+            geometry_similarity=geometry_similarity,
+            proximity_score=proximity_score
         )
 
 
@@ -123,8 +118,10 @@ def find_intelligent_matches(
     # Legacy param kept for backward compatibility
     distance_threshold: float = None,
 ) -> List[Dict]:
-
-    # Resolve legacy degree-based threshold gracefully
+    """
+    Find intelligent matches between source and target GIS layers.
+    Uses metric spatial matching combined with pairwise attribute and identity comparisons.
+    """
     threshold_m = distance_threshold_meters
 
     spatial_matches = find_spatial_matches(
@@ -133,14 +130,14 @@ def find_intelligent_matches(
         distance_threshold_meters=threshold_m
     )
 
-    attribute_matches = find_attribute_matches(
-        source_features=source_features,
-        target_features=target_features
-    )
-
-    attribute_lookup = {
-        match["source_index"]: match
-        for match in attribute_matches
+    # Build attribute lookup maps by feature index
+    source_attr_map = {
+        f.get("source_index", i): f.get("attributes", {})
+        for i, f in enumerate(source_features)
+    }
+    target_attr_map = {
+        f.get("source_index", i): f.get("attributes", {})
+        for i, f in enumerate(target_features)
     }
 
     model = load_match_model()
@@ -148,21 +145,17 @@ def find_intelligent_matches(
     intelligent_matches = []
 
     for spatial_match in spatial_matches:
-
         source_index = spatial_match["source_index"]
         target_index = spatial_match["target_index"]
 
-        attribute_match = attribute_lookup.get(source_index)
+        src_attrs = source_attr_map.get(source_index, {})
+        tgt_attrs = target_attr_map.get(target_index, {})
 
-        attribute_score = 0.0
-        attribute_details = None
-
-        if (
-            attribute_match
-            and attribute_match["target_index"] == target_index
-        ):
-            attribute_score = attribute_match["attribute_score"]
-            attribute_details = attribute_match["comparisons"]
+        # Direct pairwise attribute and legal identity comparison
+        comparison = compare_attributes(src_attrs, tgt_attrs)
+        attribute_score = comparison["attribute_score"]
+        identity_score = comparison["identity_score"]
+        attribute_details = comparison["comparisons"]
 
         spatial_score = spatial_match["confidence_score"]
         geometry_similarity = spatial_match["geometry_similarity"]
@@ -175,7 +168,8 @@ def find_intelligent_matches(
             attribute_score=attribute_score,
             geometry_similarity=geometry_similarity,
             proximity_score=proximity_score,
-            distance=distance_m
+            distance=distance_m,
+            identity_score=identity_score
         )
 
         confidence = build_confidence_result(final_score)
@@ -188,6 +182,7 @@ def find_intelligent_matches(
             {
                 "source_index": source_index,
                 "target_index": target_index,
+                "identity_score": identity_score,
                 "spatial_score": spatial_score,
                 "attribute_score": attribute_score,
                 "geometry_similarity": geometry_similarity,

@@ -5,6 +5,7 @@ psycopg2-binary
 geoalchemy2
 pydantic
 pydantic-settings
+email-validator
 python-dotenv
 python-multipart
 python-jose[cryptography]

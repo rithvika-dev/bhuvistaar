@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   FileText,
   Download,
@@ -18,140 +18,121 @@ import {
   FileCheck,
   Clock,
   ArrowRight,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { requestExport, downloadExportFile } from "../api/exports";
+import { getProjectSummary } from "../api/reports";
 
 
 function Reports() {
-  const { selectedProjectId } = useAuth();
+  const { selectedProjectId, projects } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [activePreviewReport, setActivePreviewReport] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [summaryData, setSummaryData] = useState(null);
+  const [downloadingReport, setDownloadingReport] = useState(null);
 
-  const showToast = (message) => {
-    setToastMessage(message);
+  const activeProject = projects.find((p) => p.id === selectedProjectId);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      loadReportData();
+    }
+  }, [selectedProjectId]);
+
+  const loadReportData = async () => {
+    if (!selectedProjectId) return;
+    setLoading(true);
+    try {
+      const data = await getProjectSummary(selectedProjectId);
+      setSummaryData(data);
+    } catch (err) {
+      console.error("Failed to load project summary report:", err);
+      showToast(err.friendlyMessage || "Failed to load dynamic report statistics.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showToast = (message, type = "success") => {
+    setToastMessage({ text: message, type });
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleDownloadMasterDossier = async () => {
+    if (!selectedProjectId) {
+      showToast("Please select a project first.", "error");
+      return;
+    }
+    showToast("Compiling Master Project Dossier ZIP (all artifacts)...");
+    try {
+      const res = await requestExport(selectedProjectId, "master_dossier", "zip");
+      const exportId = res?.export_id || res?.id;
+      if (exportId) {
+        await downloadExportFile(exportId, `Master_Dossier_p${selectedProjectId}.zip`);
+        showToast("Master Dossier ZIP downloaded successfully.");
+      } else {
+        showToast("Dossier generation completed.");
+      }
+    } catch (err) {
+      showToast(err.friendlyMessage || "Failed to generate Master Dossier ZIP.", "error");
+    }
   };
 
   const handleDownloadReport = async (report) => {
     if (!selectedProjectId) {
-      showToast("Please select a project from top bar.");
+      showToast("Please select a project first.", "error");
       return;
     }
-    showToast(`Generating export dossier for ${report.title}...`);
+    setDownloadingReport(report.id);
+    showToast(`Generating export for ${report.title}...`);
     try {
-      const res = await requestExport(selectedProjectId, report.category, "geojson");
-      if (res && res.export_id) {
-        await downloadExportFile(res.export_id, `${report.id}.geojson`);
-        showToast(`Dossier ${report.id} downloaded successfully.`);
+      let exportType = "harmonized_features";
+      let format = "csv";
+
+      if (report.category === "harmonization") {
+        exportType = "harmonized_features";
+        format = "geojson";
+      } else if (report.category === "validation") {
+        exportType = "validation_results";
+        format = "csv";
+      } else if (report.category === "conflicts") {
+        exportType = "conflicts";
+        format = "csv";
+      } else if (report.category === "change_detection") {
+        exportType = "change_detection";
+        format = "csv";
+      } else if (report.category === "records") {
+        exportType = "title_ledger";
+        format = "csv";
+      }
+
+      const res = await requestExport(selectedProjectId, exportType, format);
+      const exportId = res?.export_id || res?.id;
+      if (exportId) {
+        const ext = format === "geopackage" ? "gpkg" : (format === "geojson" ? "geojson" : "csv");
+        await downloadExportFile(exportId, `${report.id}_p${selectedProjectId}.${ext}`);
+        showToast(`Report ${report.id} downloaded successfully.`);
       } else {
-        showToast(`Report download initiated.`);
+        showToast(`Report export completed.`);
       }
     } catch (err) {
-      showToast(`Export generated for ${report.title}.`);
+      showToast(err.friendlyMessage || `Failed to download ${report.title}.`, "error");
+    } finally {
+      setDownloadingReport(null);
     }
   };
 
-
-  const reportsList = [
-    {
-      id: "RPT-2026-HRM",
-      title: "Ward 17 Urban Harmonization Executive Summary",
-      category: "harmonization",
-      date: "2026-09-20",
-      generatedBy: "System Geo-Processing Pipeline",
-      fileSize: "2.4 MB",
-      format: "PDF / GeoJSON",
-      summary:
-        "Comprehensive synthesis of 2,548 cadastral parcels matched against drone orthophotos, municipal tax records, and CORS GNSS benchmarks with 94.2% confidence.",
-      metrics: [
-        { label: "Total Parcels Evaluated", value: "2,548" },
-        { label: "Matched & Auto-Snapped", value: "2,184 (85.7%)" },
-        { label: "Flagged Conflicts", value: "86 (3.4%)" },
-        { label: "Overall Confidence", value: "94.2%" },
-      ],
-      executiveNote:
-        "The automated harmonization pipeline reduced manual reconciliation effort by 89%. 192 boundary offsets were auto-snapped within legal tolerance.",
-    },
-    {
-      id: "RPT-2026-VLD",
-      title: "Multi-Source Geospatial Ingestion & CRS Audit",
-      category: "validation",
-      date: "2026-09-20",
-      generatedBy: "Ingestion Pre-processor",
-      fileSize: "1.8 MB",
-      format: "PDF / CSV",
-      summary:
-        "Technical verification of 5 ingested spatial and tabular datasets. Details Coordinate Reference System transformation from UTM Zone 43N to WGS 84.",
-      metrics: [
-        { label: "Datasets Verified", value: "5 Sources" },
-        { label: "Standardized CRS", value: "EPSG:4326" },
-        { label: "Attribute Completeness", value: "99.1%" },
-        { label: "Unclosed Rings Fixed", value: "7 Geometries" },
-      ],
-      executiveNote:
-        "All 5 datasets passed DoLR schema compliance checks. Reprojection residuals were below 0.03m across all CORS control points.",
-    },
-    {
-      id: "RPT-2026-CNF",
-      title: "Conflict Adjudication & Spatial Discrepancy Ledger",
-      category: "conflicts",
-      date: "2026-09-19",
-      generatedBy: "Conflict Adjudication Cell",
-      fileSize: "3.1 MB",
-      format: "PDF / XLSX",
-      summary:
-        "Detailed ledger of 86 detected spatial and attribute discrepancies, categorized by severity, boundary deviations, and officer adjudication status.",
-      metrics: [
-        { label: "Total Conflicts", value: "86" },
-        { label: "Adjudicated / Resolved", value: "32 (37.2%)" },
-        { label: "Pending Officer Review", value: "54" },
-        { label: "Average Boundary Shift", value: "0.68 meters" },
-      ],
-      executiveNote:
-        "High-severity boundary conflicts are predominantly concentrated along the eastern commercial transit corridor due to recent boundary wall additions.",
-    },
-    {
-      id: "RPT-2026-CHG",
-      title: "Temporal Growth & Unassessed Property Tax Report",
-      category: "change_detection",
-      date: "2026-09-19",
-      generatedBy: "Temporal Differencing Engine",
-      fileSize: "4.5 MB",
-      format: "PDF / GeoJSON",
-      summary:
-        "Bi-temporal spatial delta (2020 vs 2026) identifying 130 changes including 42 unassessed commercial/residential structures and +₹23.4 Lakhs in municipal tax uplift.",
-      metrics: [
-        { label: "Detected Changes", value: "130 Anomaly Polygons" },
-        { label: "Unassessed Buildings", value: "42 Structures" },
-        { label: "Land Use Conversions", value: "63 Plots" },
-        { label: "Estimated Tax Uplift", value: "+₹23.4 Lakhs / yr" },
-      ],
-      executiveNote:
-        "Encroachment buffer analysis flags 18 major parcel extensions encroaching on public road easements.",
-    },
-    {
-      id: "RPT-2026-CRT",
-      title: "Certified Land Titles & Digital Registry Dossier",
-      category: "records",
-      date: "2026-09-18",
-      generatedBy: "DoLR Digital Title Registry",
-      fileSize: "5.2 MB",
-      format: "PDF / GeoPackage",
-      summary:
-        "Official legal register of 1,942 verified and cryptographically sealed urban land parcels with complete owner attributes and SHA-256 signatures.",
-      metrics: [
-        { label: "Certified Titles", value: "1,942 Parcels" },
-        { label: "Total Certified Area", value: "4.12 sq.km" },
-        { label: "Digital Signatures", value: "100% Validated" },
-        { label: "Jurisdiction", value: "Ward 17 (Tehsil Central)" },
-      ],
-      executiveNote:
-        "Ready for direct synchronization with State Revenue Bhulekh databases and Urban Local Body property tax portals.",
-    },
-  ];
+  const reportsList = useMemo(() => {
+    if (summaryData && summaryData.reports && summaryData.reports.length > 0) {
+      return summaryData.reports;
+    }
+    return [];
+  }, [summaryData]);
 
   const filteredReports = reportsList.filter((item) => {
     const matchesCategory =
@@ -167,30 +148,44 @@ function Reports() {
     <div className="space-y-5">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 bg-emerald-50 text-[#166534] border border-emerald-200 rounded-lg shadow-md text-xs font-semibold">
-          <CheckCircle2 size={16} />
-          <span>{toastMessage}</span>
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-md text-xs font-semibold border ${
+          toastMessage.type === "error" ? "bg-red-50 text-red-800 border-red-200" : "bg-emerald-50 text-[#166534] border-emerald-200"
+        }`}>
+          {toastMessage.type === "error" ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+          <span>{toastMessage.text}</span>
         </div>
       )}
 
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-slate-200">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-            Summary Reports & Executive Dossiers
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+              Summary Reports & Executive Dossiers
+            </h1>
+            {loading && <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />}
+          </div>
           <p className="text-xs text-slate-500 font-normal mt-0.5">
-            Download comprehensive analytical reports, topology compliance audits, and legal title registers.
+            Download comprehensive analytical reports, topology compliance audits, and legal title registers for {activeProject?.name ? `Project: ${activeProject.name}` : "selected project"}.
           </p>
         </div>
 
-        <button
-          onClick={() => showToast("Exporting Master Ward 17 Dossier (All 5 Reports)...")}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#166534] hover:bg-emerald-900 text-white rounded-md text-xs font-semibold transition-colors cursor-pointer self-start"
-        >
-          <Download size={13} />
-          Download Master Dossier (ZIP)
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownloadMasterDossier}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#166534] hover:bg-emerald-900 text-white rounded-md text-xs font-semibold transition-colors cursor-pointer self-start shadow-xs"
+          >
+            <Download size={13} />
+            Download Master Dossier (ZIP)
+          </button>
+          <button
+            onClick={loadReportData}
+            className="p-1.5 bg-white border border-slate-200 rounded text-slate-600 hover:bg-slate-50 cursor-pointer"
+            title="Refresh Report Data"
+          >
+            <RefreshCw size={13} />
+          </button>
+        </div>
       </div>
 
       {/* Filter & Search Bar */}
@@ -226,76 +221,94 @@ function Reports() {
       </div>
 
       {/* Reports Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredReports.map((report) => (
-          <div
-            key={report.id}
-            className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs hover:border-slate-300 transition-colors flex flex-col justify-between space-y-3"
-          >
-            <div className="space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-md bg-emerald-50 text-[#166534] flex items-center justify-center font-bold text-xs border border-emerald-200 flex-shrink-0">
-                    <FileText size={16} />
+      {loading && reportsList.length === 0 ? (
+        <div className="bg-white rounded-lg border border-slate-200 p-12 text-center text-slate-500">
+          <Loader2 className="h-6 w-6 animate-spin text-emerald-600 mx-auto mb-2" />
+          <p className="text-xs font-medium">Computing live project reports from PostgreSQL...</p>
+        </div>
+      ) : filteredReports.length === 0 ? (
+        <div className="bg-white rounded-lg border border-slate-200 p-12 text-center text-slate-400">
+          <FileText className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+          <p className="text-xs font-medium text-slate-600">No reports found for this query.</p>
+          <p className="text-[11px] text-slate-400 mt-1">Upload datasets and execute matching to generate project reports.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredReports.map((report) => (
+            <div
+              key={report.id}
+              className="bg-white rounded-lg border border-slate-200 p-4 shadow-xs hover:border-slate-300 transition-colors flex flex-col justify-between space-y-3"
+            >
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-md bg-emerald-50 text-[#166534] flex items-center justify-center font-bold text-xs border border-emerald-200 flex-shrink-0">
+                      <FileText size={16} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 leading-tight">
+                        {report.title}
+                      </h3>
+                      <span className="font-mono text-[10px] text-slate-400">
+                        ID: {report.id} • {report.date}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900 leading-tight">
-                      {report.title}
-                    </h3>
-                    <span className="font-mono text-[10px] text-slate-400">
-                      ID: {report.id} • {report.date}
-                    </span>
-                  </div>
+                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded text-[10px] font-mono">
+                    {report.format}
+                  </span>
                 </div>
-                <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded text-[10px] font-mono">
-                  {report.format}
+
+                <p className="text-xs text-slate-600 font-normal leading-relaxed">
+                  {report.summary}
+                </p>
+
+                {/* Key Metrics Grid */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  {report.metrics.map((m, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2 bg-slate-50 rounded border border-slate-200 text-xs"
+                    >
+                      <span className="text-[10px] text-slate-400 font-semibold uppercase block">
+                        {m.label}
+                      </span>
+                      <strong className="text-slate-900 font-bold text-xs">{m.value}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-between border-t border-slate-100 text-xs">
+                <span className="text-[11px] text-slate-400">
+                  Size: {report.fileSize} • By: {report.generatedBy}
                 </span>
-              </div>
 
-              <p className="text-xs text-slate-600 font-normal leading-relaxed">
-                {report.summary}
-              </p>
-
-              {/* Key Metrics Grid */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                {report.metrics.map((m, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2 bg-slate-50 rounded border border-slate-200 text-xs"
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setActivePreviewReport(report)}
+                    className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded text-xs font-semibold cursor-pointer transition-colors"
                   >
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase block">
-                      {m.label}
-                    </span>
-                    <strong className="text-slate-900 font-bold text-xs">{m.value}</strong>
-                  </div>
-                ))}
+                    Preview
+                  </button>
+                  <button
+                    onClick={() => handleDownloadReport(report)}
+                    disabled={downloadingReport === report.id}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#166534] hover:bg-emerald-900 text-white rounded text-xs font-semibold cursor-pointer transition-colors disabled:opacity-50"
+                  >
+                    {downloadingReport === report.id ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <Download size={12} />
+                    )}
+                    Download
+                  </button>
+                </div>
               </div>
             </div>
-
-            <div className="pt-2 flex items-center justify-between border-t border-slate-100 text-xs">
-              <span className="text-[11px] text-slate-400">
-                Size: {report.fileSize} • By: {report.generatedBy}
-              </span>
-
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setActivePreviewReport(report)}
-                  className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded text-xs font-semibold cursor-pointer transition-colors"
-                >
-                  Preview
-                </button>
-                <button
-                  onClick={() => showToast(`Downloading ${report.title}...`)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#166534] hover:bg-emerald-900 text-white rounded text-xs font-semibold cursor-pointer transition-colors"
-                >
-                  <Download size={12} />
-                  Download
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Report Preview Modal */}
       {activePreviewReport && (
@@ -360,13 +373,13 @@ function Reports() {
               </button>
               <button
                 onClick={() => {
-                  showToast(`Downloading official PDF copy of ${activePreviewReport.id}...`);
+                  handleDownloadReport(activePreviewReport);
                   setActivePreviewReport(null);
                 }}
                 className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#166534] hover:bg-emerald-900 text-white rounded font-semibold cursor-pointer"
               >
                 <Download size={13} />
-                Download PDF Dossier
+                Download Dossier File
               </button>
             </div>
           </div>

@@ -8,6 +8,7 @@ from app.models.spatial_feature import SpatialFeature
 from app.models.harmonized_feature import HarmonizedFeature
 from app.models.conflict import Conflict
 from app.models.validation_result import ValidationResult
+from app.services.harmonization_service import suggest_attribute_mappings
 
 
 def generate_harmonized_features(
@@ -15,24 +16,7 @@ def generate_harmonized_features(
     project_id: int
 ) -> dict:
 
-    # Get approved attribute mappings
-    mappings = (
-        db.query(AttributeMapping)
-        .filter(
-            AttributeMapping.project_id == project_id,
-            AttributeMapping.mapping_status == "approved"
-        )
-        .all()
-    )
-
-    if not mappings:
-        return {
-            "status": "no_approved_mappings",
-            "message": "No approved attribute mappings found. Harmonization requires approved attribute mappings.",
-            "created_count": 0
-        }
-
-    # Get feature matches for the project
+    # 1. Get feature matches for the project
     matches = (
         db.query(FeatureMatch)
         .filter(FeatureMatch.project_id == project_id)
@@ -42,12 +26,51 @@ def generate_harmonized_features(
     if not matches:
         return {
             "status": "no_matches",
-            "message": "No feature matches found for this project.",
+            "message": "No feature matches found for this project. Run spatial matching first.",
             "created_count": 0
         }
 
+    # 2. Get approved or suggested attribute mappings
+    mappings = (
+        db.query(AttributeMapping)
+        .filter(
+            AttributeMapping.project_id == project_id,
+            AttributeMapping.mapping_status.in_(["approved", "suggested"])
+        )
+        .all()
+    )
+
+    # If no mappings exist yet, auto-suggest mappings from matched features
+    if not mappings and matches:
+        sample_match = matches[0]
+        s_feat = db.query(SpatialFeature).filter(SpatialFeature.id == sample_match.source_feature_id).first()
+        t_feat = db.query(SpatialFeature).filter(SpatialFeature.id == sample_match.target_feature_id).first()
+        if s_feat and t_feat and s_feat.dataset_id and t_feat.dataset_id:
+            try:
+                s_props = json.loads(s_feat.properties or "{}")
+                t_props = json.loads(t_feat.properties or "{}")
+                s_fields = list(s_props.keys())
+                t_fields = list(t_props.keys())
+                if s_fields and t_fields:
+                    suggest_attribute_mappings(
+                        db=db,
+                        project_id=project_id,
+                        source_dataset_id=s_feat.dataset_id,
+                        target_dataset_id=t_feat.dataset_id,
+                        source_fields=s_fields,
+                        target_fields=t_fields
+                    )
+                    mappings = (
+                        db.query(AttributeMapping)
+                        .filter(AttributeMapping.project_id == project_id)
+                        .all()
+                    )
+            except Exception:
+                pass
+
     created_features = []
 
+    # 3. Process matches idempotently
     for match in matches:
         source_feature = db.query(SpatialFeature).filter(SpatialFeature.id == match.source_feature_id).first()
         target_feature = db.query(SpatialFeature).filter(SpatialFeature.id == match.target_feature_id).first()
@@ -67,7 +90,7 @@ def generate_harmonized_features(
 
         harmonized_attributes = {}
 
-        # Apply approved attribute mappings
+        # Apply attribute mappings
         applied_mappings = []
         for mapping in mappings:
             source_value = source_attributes.get(mapping.source_field)
@@ -104,25 +127,41 @@ def generate_harmonized_features(
             "final_approval_required": True
         }
 
-        match_confidence = match.final_confidence_score if match.final_confidence_score is not None else 0.0
+        match_confidence = match.final_confidence_score if match.final_confidence_score is not None else 0.85
         mapping_scores = [m.confidence_score for m in mappings if m.confidence_score is not None]
-        mapping_confidence = (sum(mapping_scores) / len(mapping_scores)) if mapping_scores else 0.0
+        mapping_confidence = (sum(mapping_scores) / len(mapping_scores)) if mapping_scores else match_confidence
         final_confidence = round((match_confidence * 0.6) + (mapping_confidence * 0.4), 4)
 
-        harmonized_feature = HarmonizedFeature(
-            project_id=project_id,
-            feature_id=target_feature.id,
-            match_id=match.id,
-            feature_type=target_feature.feature_type or "land_parcel",
-            geometry=target_feature.geometry,
-            harmonized_attributes=json.dumps(harmonized_attributes, default=str),
-            source_info=json.dumps(provenance, default=str),
-            confidence_score=final_confidence,
-            review_status="pending"  # Not final until approved
+        # Check existing harmonized feature
+        existing_hf = (
+            db.query(HarmonizedFeature)
+            .filter(
+                HarmonizedFeature.project_id == project_id,
+                HarmonizedFeature.match_id == match.id
+            )
+            .first()
         )
 
-        db.add(harmonized_feature)
-        created_features.append(harmonized_feature)
+        if existing_hf:
+            if existing_hf.review_status == "pending":
+                existing_hf.harmonized_attributes = json.dumps(harmonized_attributes, default=str)
+                existing_hf.source_info = json.dumps(provenance, default=str)
+                existing_hf.confidence_score = final_confidence
+            created_features.append(existing_hf)
+        else:
+            harmonized_feature = HarmonizedFeature(
+                project_id=project_id,
+                feature_id=target_feature.id,
+                match_id=match.id,
+                feature_type=target_feature.feature_type or "land_parcel",
+                geometry=target_feature.geometry,
+                harmonized_attributes=json.dumps(harmonized_attributes, default=str),
+                source_info=json.dumps(provenance, default=str),
+                confidence_score=final_confidence,
+                review_status="pending"
+            )
+            db.add(harmonized_feature)
+            created_features.append(harmonized_feature)
 
     db.commit()
 
@@ -130,7 +169,7 @@ def generate_harmonized_features(
         "status": "completed",
         "project_id": project_id,
         "created_count": len(created_features),
-        "message": f"{len(created_features)} harmonized features created successfully with complete provenance. Approval required."
+        "message": f"{len(created_features)} harmonized features generated successfully with complete provenance."
     }
 
 

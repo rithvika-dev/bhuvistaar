@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -17,8 +19,8 @@ router = APIRouter(
 @router.post("/run")
 def run_matching(
     project_id: int,
-    source_dataset_id: int,
-    target_dataset_id: int,
+    source_dataset_id: Optional[int] = None,
+    target_dataset_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -42,8 +44,12 @@ def run_matching(
             detail="You do not have access to this project"
         )
 
-    # Source and target must be different
-    if source_dataset_id == target_dataset_id:
+    # Source and target must be different (if both provided)
+    if (
+        source_dataset_id is not None
+        and target_dataset_id is not None
+        and source_dataset_id == target_dataset_id
+    ):
         raise HTTPException(
             status_code=400,
             detail="Source and target datasets must be different"

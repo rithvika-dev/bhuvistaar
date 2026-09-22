@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 
 
 def build_match_features(
@@ -6,7 +6,8 @@ def build_match_features(
     attribute_score: float,
     geometry_similarity: float,
     proximity_score: float,
-    distance: float
+    distance: float,
+    identity_score: Optional[float] = 0.5
 ) -> Dict[str, float]:
     """
     Convert GIS matching information into numerical
@@ -15,27 +16,26 @@ def build_match_features(
 
     spatial_score = float(spatial_score or 0.0)
     attribute_score = float(attribute_score or 0.0)
-    geometry_similarity = float(
-        geometry_similarity or 0.0
-    )
-    proximity_score = float(
-        proximity_score or 0.0
-    )
+    geometry_similarity = float(geometry_similarity or 0.0)
+    proximity_score = float(proximity_score or 0.0)
     distance = float(distance or 0.0)
+    identity_score = float(0.5 if identity_score is None else identity_score)
 
-    # Distance should contribute less as it increases.
-    distance_score = 1.0 / (1.0 + distance)
+    # Distance score decay
+    distance_score = 1.0 / (1.0 + (distance / 10.0))
 
-    # Combined heuristic score.
+    # Combined heuristic score with strong weight on identity_score
     combined_score = (
-        spatial_score * 0.30
-        + attribute_score * 0.25
-        + geometry_similarity * 0.20
-        + proximity_score * 0.15
-        + distance_score * 0.10
+        identity_score * 0.35
+        + spatial_score * 0.25
+        + attribute_score * 0.15
+        + geometry_similarity * 0.10
+        + proximity_score * 0.10
+        + distance_score * 0.05
     )
 
     return {
+        "identity_score": identity_score,
         "spatial_score": spatial_score,
         "attribute_score": attribute_score,
         "geometry_similarity": geometry_similarity,
@@ -52,6 +52,7 @@ def build_training_row(
     geometry_similarity: float,
     proximity_score: float,
     distance: float,
+    identity_score: float,
     label: int
 ) -> Dict[str, float]:
     """
@@ -67,7 +68,8 @@ def build_training_row(
         attribute_score=attribute_score,
         geometry_similarity=geometry_similarity,
         proximity_score=proximity_score,
-        distance=distance
+        distance=distance,
+        identity_score=identity_score
     )
 
     features["label"] = int(label)

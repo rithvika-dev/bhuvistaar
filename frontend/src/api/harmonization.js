@@ -41,3 +41,12 @@ export const reviewHarmonizedFeature = async (featureId, reviewStatus, reviewNot
   return response.data;
 };
 
+export const getAttributeMappings = async (projectId) => {
+  try {
+    const response = await apiClient.get(`/attribute-mappings/project/${projectId}`);
+    return response.data;
+  } catch (err) {
+    return { project_id: projectId, count: 0, mappings: [] };
+  }
+};
+

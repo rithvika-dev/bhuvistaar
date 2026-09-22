@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.sql import func
 
 from app.database import Base
@@ -6,6 +6,9 @@ from app.database import Base
 
 class FeatureMatch(Base):
     __tablename__ = "feature_matches"
+    __table_args__ = (
+        UniqueConstraint("source_feature_id", "target_feature_id", name="idx_feature_matches_unique_pair"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 

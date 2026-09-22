@@ -47,6 +47,17 @@ class Conflict(Base):
         nullable=True
     )
 
+    severity = Column(
+        String(50),
+        nullable=True,
+        default="medium"
+    )
+
+    suggested_resolution = Column(
+        Text,
+        nullable=True
+    )
+
     resolution_status = Column(
         String(50),
         nullable=False,

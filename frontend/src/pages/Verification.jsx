@@ -33,8 +33,13 @@ function Verification() {
   const loadPendingMatches = async (projectId) => {
     setLoading(true);
     try {
-      const matches = await getPendingMatches(projectId);
-      setPendingMatches(matches || []);
+      const data = await getPendingMatches(projectId);
+      // API returns { matches: [...] } with match_id field
+      const matchList = (data?.matches || data || []).map((m) => ({
+        ...m,
+        id: m.match_id || m.id,
+      }));
+      setPendingMatches(matchList);
     } catch (err) {
       console.error("Failed to load pending matches:", err);
     } finally {
@@ -62,12 +67,12 @@ function Verification() {
     if (!selectedProjectId) return;
     setMatchingRunning(true);
     try {
-      // Find source & target datasets for active project
-      const result = await runMatching(selectedProjectId, 1, 2);
+      // Auto-resolve source & target datasets on backend
+      const result = await runMatching(selectedProjectId);
       showToast(`Matching complete: ${result.matches_found || 0} matches found!`);
       loadPendingMatches(selectedProjectId);
     } catch (err) {
-      showToast(err.friendlyMessage || "Matching failed (Ensure datasets 1 and 2 exist).", "error");
+      showToast(err.friendlyMessage || "Matching failed. Check datasets exist and are processed.", "error");
     } finally {
       setMatchingRunning(false);
     }

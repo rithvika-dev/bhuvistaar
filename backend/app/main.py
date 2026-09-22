@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import Base, engine
+from app.database import engine,Base
 from app.migrations.add_indexes import run_migrations
 
 # Models
@@ -62,6 +62,8 @@ from app.routers.georeferencing import router as georeferencing_router
 from app.routers.raster import router as raster_router
 from app.routers.exports import router as exports_router
 from app.routers.pipeline import router as pipeline_router
+from app.routers.settings import router as settings_router
+from app.routers.reports import router as reports_router
 
 # Ensure schema matches the current model set and backfill any legacy/missing columns.
 run_migrations()
@@ -189,3 +191,5 @@ app.include_router(georeferencing_router)
 app.include_router(raster_router)
 app.include_router(exports_router)
 app.include_router(pipeline_router)
+app.include_router(settings_router)
+app.include_router(reports_router)

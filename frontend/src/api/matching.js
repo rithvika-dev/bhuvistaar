@@ -1,16 +1,19 @@
 import apiClient from './client';
 
 export const runMatching = async (projectId, sourceDatasetId, targetDatasetId) => {
-  const response = await apiClient.post('/matching/run', {
-    project_id: projectId,
-    source_dataset_id: sourceDatasetId,
-    target_dataset_id: targetDatasetId,
-  });
+  const params = { project_id: projectId };
+  if (sourceDatasetId != null) {
+    params.source_dataset_id = sourceDatasetId;
+  }
+  if (targetDatasetId != null) {
+    params.target_dataset_id = targetDatasetId;
+  }
+  const response = await apiClient.post('/matching/run', null, { params });
   return response.data;
 };
 
 export const getPendingMatches = async (projectId) => {
-  const response = await apiClient.get(`/matching/${projectId}/pending`);
+  const response = await apiClient.get(`/match-results/pending/${projectId}`);
   return response.data;
 };
 

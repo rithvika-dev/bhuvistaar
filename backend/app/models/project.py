@@ -36,6 +36,12 @@ class Project(Base):
         nullable=False
     )
 
+    settings = Column(
+        Text,
+        nullable=True,
+        default="{}"
+    )
+
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now()

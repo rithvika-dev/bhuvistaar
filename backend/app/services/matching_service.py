@@ -1,5 +1,7 @@
 import json
+import logging
 import os
+from typing import Optional
 
 import geopandas as gpd
 from sqlalchemy.orm import Session
@@ -12,46 +14,169 @@ from app.models.feature_match import FeatureMatch
 from app.ai.matching_engine import find_intelligent_matches
 from app.gis.feature_extractor import extract_features
 
+logger = logging.getLogger(__name__)
+
+
+def resolve_matching_datasets(
+    db: Session,
+    project_id: int,
+    source_dataset_id: Optional[int] = None,
+    target_dataset_id: Optional[int] = None
+):
+    """
+    Resolve source (baseline/cadastral) and target (drone/survey) datasets
+    for feature matching.  When explicit IDs are provided and valid, uses them.
+    Otherwise auto-resolves from project datasets using name/source heuristics
+    (same pattern as change_detection_service.resolve_project_versions).
+    """
+    # 1. Try explicit IDs first
+    if source_dataset_id and target_dataset_id and source_dataset_id != target_dataset_id:
+        src = (
+            db.query(Dataset)
+            .filter(Dataset.id == source_dataset_id, Dataset.project_id == project_id)
+            .first()
+        )
+        tgt = (
+            db.query(Dataset)
+            .filter(Dataset.id == target_dataset_id, Dataset.project_id == project_id)
+            .first()
+        )
+        if src and tgt:
+            # Verify they have processed versions with features
+            src_v = _get_latest_version_with_features(db, src.id)
+            tgt_v = _get_latest_version_with_features(db, tgt.id)
+            if src_v and tgt_v:
+                logger.info(
+                    "Using explicit dataset IDs: source=%d (version %d), target=%d (version %d)",
+                    src.id, src_v.id, tgt.id, tgt_v.id
+                )
+                return src, tgt, src_v, tgt_v
+
+    # 2. Auto-resolve from project datasets
+    datasets = (
+        db.query(Dataset)
+        .filter(Dataset.project_id == project_id)
+        .order_by(Dataset.created_at.asc())
+        .all()
+    )
+
+    if not datasets:
+        raise ValueError(f"No datasets found for project {project_id}.")
+
+    # Collect datasets with their latest version containing spatial features
+    candidates = []
+    for d in datasets:
+        v = _get_latest_version_with_features(db, d.id)
+        if v:
+            count = db.query(SpatialFeature).filter(
+                SpatialFeature.dataset_version_id == v.id
+            ).count()
+            candidates.append((d, v, count))
+
+    if len(candidates) < 2:
+        raise ValueError(
+            f"Project {project_id} requires at least 2 processed datasets with spatial features. "
+            f"Found {len(candidates)} valid datasets."
+        )
+
+    # Separate baseline vs drone/survey by name/source heuristics
+    baseline_candidate = None
+    drone_candidate = None
+
+    for d, v, cnt in candidates:
+        name_lower = (d.name or "").lower()
+        source_lower = (d.source or "").lower()
+
+        if (
+            "cadastral" in name_lower
+            or "baseline" in name_lower
+            or "cadastral" in source_lower
+            or "historical" in source_lower
+            or "t0" in name_lower
+        ) and not baseline_candidate:
+            baseline_candidate = (d, v, cnt)
+        elif (
+            "drone" in name_lower
+            or "footprint" in name_lower
+            or "building" in name_lower
+            or "survey" in source_lower
+            or "drone" in source_lower
+            or "t1" in name_lower
+        ) and not drone_candidate:
+            drone_candidate = (d, v, cnt)
+
+    # Fallbacks if naming didn't match cleanly
+    if not baseline_candidate:
+        baseline_candidate = candidates[0]
+    if not drone_candidate:
+        remaining = [c for c in candidates if c[1].id != baseline_candidate[1].id]
+        if remaining:
+            drone_candidate = remaining[-1]
+        else:
+            drone_candidate = candidates[-1]
+
+    if baseline_candidate[1].id == drone_candidate[1].id:
+        raise ValueError("Source and target dataset versions must be distinct.")
+
+    d_src, v_src, _ = baseline_candidate
+    d_tgt, v_tgt, _ = drone_candidate
+
+    logger.info(
+        "Auto-resolved datasets for project %d: source=%s (dataset %d, version %d), "
+        "target=%s (dataset %d, version %d)",
+        project_id, d_src.name, d_src.id, v_src.id, d_tgt.name, d_tgt.id, v_tgt.id
+    )
+
+    return d_src, d_tgt, v_src, v_tgt
+
+
+def _get_latest_version_with_features(db: Session, dataset_id: int):
+    """Get the latest DatasetVersion for a dataset that has spatial features."""
+    versions = (
+        db.query(DatasetVersion)
+        .filter(DatasetVersion.dataset_id == dataset_id)
+        .order_by(DatasetVersion.version_number.desc())
+        .all()
+    )
+    for v in versions:
+        count = db.query(SpatialFeature).filter(
+            SpatialFeature.dataset_version_id == v.id
+        ).count()
+        if count > 0:
+            return v
+    return None
+
 
 def run_feature_matching(
     db: Session,
     project_id: int,
-    source_dataset_id: int,
-    target_dataset_id: int
+    source_dataset_id: Optional[int] = None,
+    target_dataset_id: Optional[int] = None
 ) -> dict:
 
     # --------------------------------------------------
-    # 1. Get source dataset
+    # 1. Resolve source & target datasets + versions
+    #    (auto-resolves if IDs are None or invalid)
     # --------------------------------------------------
-    source_dataset = (
-        db.query(Dataset)
-        .filter(
-            Dataset.id == source_dataset_id,
-            Dataset.project_id == project_id
+    source_dataset, target_dataset, source_version, target_version = (
+        resolve_matching_datasets(
+            db, project_id, source_dataset_id, target_dataset_id
         )
-        .first()
     )
 
-    if not source_dataset:
-        raise ValueError("Source dataset not found")
+    # Update IDs from resolved datasets
+    source_dataset_id = source_dataset.id
+    target_dataset_id = target_dataset.id
 
-    # --------------------------------------------------
-    # 2. Get target dataset
-    # --------------------------------------------------
-    target_dataset = (
-        db.query(Dataset)
-        .filter(
-            Dataset.id == target_dataset_id,
-            Dataset.project_id == project_id
-        )
-        .first()
+    logger.info(
+        "Matching: source dataset=%d (%s) version=%d, "
+        "target dataset=%d (%s) version=%d",
+        source_dataset_id, source_dataset.name, source_version.id,
+        target_dataset_id, target_dataset.name, target_version.id
     )
 
-    if not target_dataset:
-        raise ValueError("Target dataset not found")
-
     # --------------------------------------------------
-    # 3. Check uploaded files
+    # 2. Check uploaded files
     # --------------------------------------------------
     if not source_dataset.file_path:
         raise ValueError(
@@ -74,38 +199,19 @@ def run_feature_matching(
         )
 
     # --------------------------------------------------
-    # 4. Get latest processed versions
+    # 3. Delete existing matches for this project
+    #    (idempotent: avoids unique constraint violations
+    #     on idx_feature_matches_unique_pair)
     # --------------------------------------------------
-    source_version = (
-        db.query(DatasetVersion)
-        .filter(
-            DatasetVersion.dataset_id == source_dataset_id
-        )
-        .order_by(
-            DatasetVersion.version_number.desc()
-        )
-        .first()
+    deleted_count = (
+        db.query(FeatureMatch)
+        .filter(FeatureMatch.project_id == project_id)
+        .delete(synchronize_session=False)
     )
-
-    target_version = (
-        db.query(DatasetVersion)
-        .filter(
-            DatasetVersion.dataset_id == target_dataset_id
-        )
-        .order_by(
-            DatasetVersion.version_number.desc()
-        )
-        .first()
-    )
-
-    if not source_version:
-        raise ValueError(
-            "Source dataset has not been processed yet"
-        )
-
-    if not target_version:
-        raise ValueError(
-            "Target dataset has not been processed yet"
+    if deleted_count:
+        logger.info(
+            "Deleted %d existing matches for project %d before re-matching",
+            deleted_count, project_id
         )
 
     # --------------------------------------------------
@@ -280,6 +386,9 @@ def run_feature_matching(
 
             explanation=json.dumps(
                 {
+                    "identity_score":
+                        match.get("identity_score", 0.5),
+
                     "attribute_comparisons":
                         match.get(
                             "attribute_comparisons"

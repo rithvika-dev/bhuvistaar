@@ -14,11 +14,11 @@ import {
   GitMerge,
   RefreshCw,
   Play,
+  Loader2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { listConflicts, detectConflicts, resolveConflict } from "../api/conflicts";
-
 
 function Conflicts() {
   const { selectedProjectId } = useAuth();
@@ -27,48 +27,86 @@ function Conflicts() {
   const [selectedSeverity, setSelectedSeverity] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [activeModalConflict, setActiveModalConflict] = useState(null);
-  const [resolutionChoice, setResolutionChoice] = useState("resolved");
+  const [resolutionChoice, setResolutionChoice] = useState("accepted_source");
   const [officerNote, setOfficerNote] = useState("");
   const [toastMessage, setToastMessage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [detecting, setDetecting] = useState(false);
+  const [error, setError] = useState(null);
 
   const [conflicts, setConflicts] = useState([]);
 
   useEffect(() => {
     if (selectedProjectId) {
       loadConflicts();
+    } else {
+      setConflicts([]);
     }
   }, [selectedProjectId]);
 
   const loadConflicts = async () => {
     if (!selectedProjectId) return;
     setLoading(true);
+    setError(null);
     try {
       const data = await listConflicts(selectedProjectId);
       if (data && data.conflicts) {
-        const mapped = data.conflicts.map((c) => ({
-          id: `CNF-${c.id}`,
-          rawId: c.id,
-          parcelId: `Feature #${c.feature_id || c.id}`,
-          khasraNo: c.feature_id ? `${c.feature_id}/1` : "N/A",
-          type: c.conflict_type || "Attribute Conflict",
-          sourceA: "Source A",
-          sourceB: "Source B",
-          severity: c.confidence_score < 70 ? "High" : "Medium",
-          confidence: Math.round(c.confidence_score || 85),
-          status: c.resolution_status === "resolved" || c.resolution_status === "approved" ? "Resolved" : "Pending Review",
-          detectedDate: c.created_at ? new Date(c.created_at).toISOString().split("T")[0] : "2026-09-21",
-          description: c.description || "Spatial / Attribute discrepancy detected across multi-source layers.",
-          sourceAData: { area: "Source A Record", value: String(c.source_value || "N/A") },
-          sourceBData: { area: "Source B Record", value: String(c.target_value || "N/A") },
-          aiRecommendation: "Reconcile discrepancy using highest confidence source layer.",
-          differenceSummary: `Source: ${c.source_value || "N/A"} vs Target: ${c.target_value || "N/A"}`,
-        }));
+        const mapped = data.conflicts.map((c) => {
+          const rawConf = c.confidence_score;
+          const pctConf =
+            rawConf != null
+              ? rawConf <= 1.0
+                ? Math.round(rawConf * 100)
+                : Math.round(rawConf)
+              : 85;
+
+          const rawSev = (c.severity || "medium").toLowerCase();
+          const sevDisplay =
+            rawSev === "high" ? "High" : rawSev === "low" ? "Low" : "Medium";
+
+          const isResolved =
+            c.resolution_status &&
+            c.resolution_status !== "pending";
+
+          const statusDisplay =
+            c.resolution_status === "rejected"
+              ? "Rejected"
+              : isResolved
+              ? "Resolved"
+              : "Pending Review";
+
+          return {
+            id: `CNF-${c.id}`,
+            rawId: c.id,
+            featureId: c.feature_id,
+            parcelId: c.feature_id ? `Feature #${c.feature_id}` : `Project #${c.project_id}`,
+            khasraNo: c.feature_id ? `${c.feature_id}` : "N/A",
+            type: c.conflict_type || "attribute_mismatch",
+            severity: sevDisplay,
+            confidence: pctConf,
+            status: statusDisplay,
+            rawStatus: c.resolution_status || "pending",
+            detectedDate: c.created_at
+              ? new Date(c.created_at).toISOString().split("T")[0]
+              : new Date().toISOString().split("T")[0],
+            description:
+              c.description ||
+              "Spatial / Attribute discrepancy detected across multi-source layers.",
+            sourceValue: c.source_value != null ? String(c.source_value) : "N/A",
+            targetValue: c.target_value != null ? String(c.target_value) : "N/A",
+            aiRecommendation:
+              c.suggested_resolution ||
+              "Reconcile discrepancy using authoritative multi-source validation.",
+            resolutionNotes: c.resolution_notes || "",
+          };
+        });
         setConflicts(mapped);
+      } else {
+        setConflicts([]);
       }
     } catch (err) {
       console.error("Failed to load conflicts from API:", err);
+      setError(err.friendlyMessage || "Failed to load conflicts.");
     } finally {
       setLoading(false);
     }
@@ -77,12 +115,15 @@ function Conflicts() {
   const handleRunDetection = async () => {
     if (!selectedProjectId) return;
     setDetecting(true);
+    setError(null);
     try {
-      await detectConflicts(selectedProjectId);
-      showToast("Conflict detection completed for project.");
+      const res = await detectConflicts(selectedProjectId);
+      const count = res.conflicts_found != null ? res.conflicts_found : res.conflicts?.length || 0;
+      showToast(`Conflict detection completed: ${count} active conflicts.`);
       await loadConflicts();
     } catch (err) {
       showToast("Failed to run conflict detection. " + (err.friendlyMessage || ""));
+      setError(err.friendlyMessage || "Conflict detection failed.");
     } finally {
       setDetecting(false);
     }
@@ -93,25 +134,39 @@ function Conflicts() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const handleOpenModal = (conflict) => {
+    setActiveModalConflict(conflict);
+    setResolutionChoice("accepted_source");
+    setOfficerNote(conflict.resolutionNotes || "");
+  };
+
   const handleResolveSubmit = async () => {
     if (!activeModalConflict) return;
 
     try {
-      const statusText = resolutionChoice === "rejected" ? "rejected" : "resolved";
-      await resolveConflict(activeModalConflict.rawId, statusText, officerNote);
+      await resolveConflict(
+        activeModalConflict.rawId,
+        resolutionChoice,
+        officerNote || `Officer resolved as ${resolutionChoice}`
+      );
+
+      const statusText =
+        resolutionChoice === "rejected" ? "Rejected" : "Resolved";
 
       setConflicts((prev) =>
         prev.map((c) =>
           c.id === activeModalConflict.id
             ? {
                 ...c,
-                status: statusText === "resolved" ? "Resolved" : "Rejected",
+                status: statusText,
+                rawStatus: resolutionChoice,
+                resolutionNotes: officerNote,
               }
             : c
         )
       );
 
-      showToast(`Conflict ${activeModalConflict.id} marked as ${statusText}.`);
+      showToast(`Conflict ${activeModalConflict.id} saved as ${resolutionChoice}.`);
       setActiveModalConflict(null);
       setOfficerNote("");
     } catch (err) {
@@ -127,14 +182,19 @@ function Conflicts() {
         c.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.description.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchesType = selectedType === "all" || c.type.toLowerCase().includes(selectedType.toLowerCase());
-      const matchesSeverity = selectedSeverity === "all" || c.severity.toLowerCase() === selectedSeverity.toLowerCase();
-      const matchesStatus = selectedStatus === "all" || c.status.toLowerCase() === selectedStatus.toLowerCase();
+      const matchesType =
+        selectedType === "all" ||
+        c.type.toLowerCase() === selectedType.toLowerCase();
+      const matchesSeverity =
+        selectedSeverity === "all" ||
+        c.severity.toLowerCase() === selectedSeverity.toLowerCase();
+      const matchesStatus =
+        selectedStatus === "all" ||
+        c.status.toLowerCase() === selectedStatus.toLowerCase();
 
       return matchesSearch && matchesType && matchesSeverity && matchesStatus;
     });
   }, [conflicts, searchQuery, selectedType, selectedSeverity, selectedStatus]);
-
 
   return (
     <div className="space-y-5">
@@ -160,7 +220,7 @@ function Conflicts() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleRunDetection}
-            disabled={detecting || !selectedProjectId}
+            disabled={detecting || loading || !selectedProjectId}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#166534] hover:bg-emerald-900 text-white rounded-md text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer"
           >
             {detecting ? (
@@ -184,6 +244,20 @@ function Conflicts() {
           </Link>
         </div>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 text-red-800 border border-red-200 rounded-lg text-xs font-medium">
+          <AlertTriangle size={14} />
+          <span>{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="ml-auto text-red-500 hover:text-red-700 cursor-pointer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -211,7 +285,6 @@ function Conflicts() {
         </div>
       </div>
 
-
       {/* Search & Filter Bar */}
       <div className="bg-white rounded-lg border border-slate-200 p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
         <div className="relative flex-1 w-full">
@@ -223,12 +296,25 @@ function Conflicts() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by Conflict ID (CNF-1024), Parcel ID..."
+            placeholder="Search by Conflict ID (CNF-1024), Feature ID, description..."
             className="w-full bg-slate-50 border border-slate-200 rounded-md pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:bg-white transition-colors"
           />
         </div>
 
         <div className="flex items-center gap-2">
+          <select
+            value={selectedType}
+            onChange={(e) => setSelectedType(e.target.value)}
+            className="bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-700 cursor-pointer"
+          >
+            <option value="all">All Conflict Types</option>
+            <option value="attribute_mismatch">Attribute Mismatch</option>
+            <option value="geometry_conflict">Geometry Conflict</option>
+            <option value="identity_conflict">Identity Conflict</option>
+            <option value="duplicate_feature">Duplicate Feature</option>
+            <option value="crs_inconsistency">CRS Inconsistency</option>
+          </select>
+
           <select
             value={selectedSeverity}
             onChange={(e) => setSelectedSeverity(e.target.value)}
@@ -237,6 +323,7 @@ function Conflicts() {
             <option value="all">All Severities</option>
             <option value="High">High</option>
             <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
           </select>
 
           <select
@@ -247,94 +334,120 @@ function Conflicts() {
             <option value="all">All Statuses</option>
             <option value="Pending Review">Pending Review</option>
             <option value="Resolved">Resolved</option>
+            <option value="Rejected">Rejected</option>
           </select>
         </div>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center gap-2 py-12 text-slate-500 text-sm bg-white rounded-lg border border-slate-200">
+          <Loader2 size={18} className="animate-spin" />
+          Loading conflicts from database...
+        </div>
+      )}
+
       {/* Conflicts Table */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase text-[10px] tracking-wider">
-              <tr>
-                <th className="py-2.5 px-3">Conflict ID / Parcel</th>
-                <th className="py-2.5 px-3">Type & Description</th>
-                <th className="py-2.5 px-3">Sources Involved</th>
-                <th className="py-2.5 px-3">Severity</th>
-                <th className="py-2.5 px-3">Confidence</th>
-                <th className="py-2.5 px-3">Status</th>
-                <th className="py-2.5 px-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredConflicts.length === 0 ? (
+      {!loading && (
+        <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-600">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase text-[10px] tracking-wider">
                 <tr>
-                  <td colSpan="7" className="py-8 text-center text-slate-400 text-xs">
-                    No conflicts found in the database. Upload datasets and run conflict detection to test.
-                  </td>
+                  <th className="py-2.5 px-3">Conflict ID / Feature</th>
+                  <th className="py-2.5 px-3">Type & Description</th>
+                  <th className="py-2.5 px-3">Values (Source ⟷ Target)</th>
+                  <th className="py-2.5 px-3">Severity</th>
+                  <th className="py-2.5 px-3">Confidence</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
                 </tr>
-              ) : (
-                filteredConflicts.map((c) => (
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredConflicts.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="py-8 text-center text-slate-400 text-xs">
+                      {conflicts.length === 0
+                        ? "No conflicts found in the database. Run feature matching and conflict detection to test."
+                        : "No conflicts match the selected search or filter criteria."}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredConflicts.map((c) => (
+                    <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-2.5 px-3">
+                        <span className="font-mono font-bold text-slate-900 block">{c.id}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">{c.parcelId}</span>
+                      </td>
+                      <td className="py-2.5 px-3 max-w-sm">
+                        <strong className="text-slate-900 block font-semibold capitalize">
+                          {c.type.replace(/_/g, " ")}
+                        </strong>
+                        <span className="text-[11px] text-slate-500 leading-tight block">
+                          {c.description}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700">
+                        <div className="truncate max-w-xs">
+                          <span className="text-slate-500">Src:</span> {c.sourceValue}
+                        </div>
+                        <div className="truncate max-w-xs">
+                          <span className="text-slate-500">Tgt:</span> {c.targetValue}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                            c.severity === "High"
+                              ? "bg-red-50 text-red-700 border-red-200"
+                              : c.severity === "Low"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : "bg-amber-50 text-amber-800 border-amber-200"
+                          }`}
+                        >
+                          {c.severity}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-[#166534]">{c.confidence}%</td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                            c.status === "Resolved"
+                              ? "bg-emerald-50 text-[#166534] border-emerald-200"
+                              : c.status === "Rejected"
+                              ? "bg-red-50 text-red-700 border-red-200"
+                              : "bg-amber-50 text-amber-800 border-amber-200"
+                          }`}
+                        >
+                          {c.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <button
+                          onClick={() => handleOpenModal(c)}
+                          className="px-2.5 py-1 bg-[#166534] hover:bg-emerald-900 text-white rounded text-xs font-semibold cursor-pointer transition-colors"
+                        >
+                          Adjudicate
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-                <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-2.5 px-3">
-                    <span className="font-mono font-bold text-slate-900 block">{c.id}</span>
-                    <span className="text-[10px] text-slate-400 font-mono">{c.parcelId} (Khasra {c.khasraNo})</span>
-                  </td>
-                  <td className="py-2.5 px-3">
-                    <strong className="text-slate-900 block font-semibold">{c.type}</strong>
-                    <span className="text-[11px] text-slate-500 truncate max-w-xs block">{c.description}</span>
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-700">{c.sourceA} ⟷ {c.sourceB}</td>
-                  <td className="py-2.5 px-3">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                        c.severity === "High"
-                          ? "bg-red-50 text-red-700 border-red-200"
-                          : "bg-amber-50 text-amber-800 border-amber-200"
-                      }`}
-                    >
-                      {c.severity}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-3 font-semibold text-[#166534]">{c.confidence}%</td>
-                  <td className="py-2.5 px-3">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                        c.status === "Resolved"
-                          ? "bg-emerald-50 text-[#166534] border-emerald-200"
-                          : "bg-amber-50 text-amber-800 border-amber-200"
-                      }`}
-                    >
-                      {c.status}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-3 text-right">
-                    <button
-                      onClick={() => setActiveModalConflict(c)}
-                      className="px-2.5 py-1 bg-[#166534] hover:bg-emerald-900 text-white rounded text-xs font-semibold cursor-pointer transition-colors"
-                    >
-                      Adjudicate
-                    </button>
-                  </td>
-                </tr>
-              ))
-              )}
-            </tbody>
-
-          </table>
+          {/* Table Footer */}
+          <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+            <span>
+              Showing {filteredConflicts.length} of {conflicts.length} entries
+            </span>
+            <span className="font-mono text-[11px] text-slate-400">
+              Authority: Verified Land Records Officer
+            </span>
+          </div>
         </div>
-
-        {/* Table Pagination / Summary */}
-        <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-          <span>
-            Showing {filteredConflicts.length} of {conflicts.length} entries (86 total in database)
-          </span>
-          <span className="font-mono text-[11px] text-slate-400">
-            Adjudication Authority: Officer in Charge, Ward 17 GIS Cell
-          </span>
-        </div>
-      </div>
+      )}
 
       {/* Adjudication Modal */}
       {activeModalConflict && (
@@ -346,12 +459,12 @@ function Conflicts() {
                   Adjudicate {activeModalConflict.id}
                 </h4>
                 <span className="font-mono text-[10px] text-slate-400">
-                  Parcel: {activeModalConflict.parcelId} • Khasra: {activeModalConflict.khasraNo}
+                  {activeModalConflict.parcelId} • Type: {activeModalConflict.type.replace(/_/g, " ")} • Severity: {activeModalConflict.severity}
                 </span>
               </div>
               <button
                 onClick={() => setActiveModalConflict(null)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -364,17 +477,21 @@ function Conflicts() {
 
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div className="p-2.5 bg-slate-50 border border-slate-200 rounded">
-                  <span className="font-semibold text-slate-500 block mb-0.5">{activeModalConflict.sourceA}</span>
-                  <strong className="text-slate-900">{activeModalConflict.sourceAData.area}</strong>
+                  <span className="font-semibold text-slate-500 block mb-0.5">Source Value</span>
+                  <strong className="text-slate-900 font-mono break-all">
+                    {activeModalConflict.sourceValue}
+                  </strong>
                 </div>
                 <div className="p-2.5 bg-slate-50 border border-slate-200 rounded">
-                  <span className="font-semibold text-slate-500 block mb-0.5">{activeModalConflict.sourceB}</span>
-                  <strong className="text-slate-900">{activeModalConflict.sourceBData.area}</strong>
+                  <span className="font-semibold text-slate-500 block mb-0.5">Target Value</span>
+                  <strong className="text-slate-900 font-mono break-all">
+                    {activeModalConflict.targetValue}
+                  </strong>
                 </div>
               </div>
 
               <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded text-[#166534]">
-                <strong className="block mb-0.5 font-bold">Algorithmic Recommendation:</strong>
+                <strong className="block mb-0.5 font-bold">Algorithmic Suggested Action:</strong>
                 {activeModalConflict.aiRecommendation}
               </div>
 
@@ -384,22 +501,59 @@ function Conflicts() {
                   <input
                     type="radio"
                     name="res"
-                    checked={resolutionChoice === "ai"}
-                    onChange={() => setResolutionChoice("ai")}
+                    value="accepted_source"
+                    checked={resolutionChoice === "accepted_source"}
+                    onChange={() => setResolutionChoice("accepted_source")}
                     className="accent-emerald-700"
                   />
-                  <span>Adopt Recommendation (Auto-snap to GNSS / Drone GCP)</span>
+                  <span>Accept Source Record (Retain Source Baseline)</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
                     name="res"
-                    checked={resolutionChoice === "sourceA"}
-                    onChange={() => setResolutionChoice("sourceA")}
+                    value="accepted_target"
+                    checked={resolutionChoice === "accepted_target"}
+                    onChange={() => setResolutionChoice("accepted_target")}
                     className="accent-emerald-700"
                   />
-                  <span>Retain Legal Baseline (Cadastral RoR)</span>
+                  <span>Accept Target Record (Adopt Field/Drone Survey)</span>
                 </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="res"
+                    value="merged"
+                    checked={resolutionChoice === "merged"}
+                    onChange={() => setResolutionChoice("merged")}
+                    className="accent-emerald-700"
+                  />
+                  <span>Merge & Reconcile Records</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="res"
+                    value="rejected"
+                    checked={resolutionChoice === "rejected"}
+                    onChange={() => setResolutionChoice("rejected")}
+                    className="accent-emerald-700"
+                  />
+                  <span>Dismiss / Reject Conflict</span>
+                </label>
+              </div>
+
+              <div className="pt-1">
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Officer Review Notes:
+                </label>
+                <textarea
+                  value={officerNote}
+                  onChange={(e) => setOfficerNote(e.target.value)}
+                  placeholder="Enter adjudication rationale or reference survey report..."
+                  rows={2}
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-xs text-slate-800 placeholder-slate-400 focus:bg-white transition-colors"
+                />
               </div>
             </div>
 

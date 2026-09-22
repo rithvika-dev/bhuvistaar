@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -8,7 +9,8 @@ from app.models.user import User
 from app.services.auth_dependency import get_current_user
 from app.services.change_detection_service import (
     detect_changes_between_features,
-    detect_changes_between_versions
+    detect_changes_between_versions,
+    get_project_change_detections
 )
 
 router = APIRouter(
@@ -25,8 +27,29 @@ class FeatureChangeDetectionRequest(BaseModel):
 
 class VersionChangeDetectionRequest(BaseModel):
     project_id: int
-    old_version_id: int
-    new_version_id: int
+    old_version_id: Optional[int] = None
+    new_version_id: Optional[int] = None
+
+
+@router.get("/{project_id}")
+@router.get("/results/{project_id}")
+def get_change_detections(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retrieve all temporal change detection records and summary metrics for a project."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You do not have access to this project")
+
+    try:
+        return get_project_change_detections(db=db, project_id=project_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch change detections: {str(e)}")
 
 
 @router.post("/detect")

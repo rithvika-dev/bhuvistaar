@@ -88,9 +88,14 @@ def download_export(
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Export file does not exist on disk.")
 
-    media_type = "application/geo+json" if export_rec.format == "geojson" else (
-        "application/x-sqlite3" if export_rec.format in ("geopackage", "gpkg") else "text/csv"
-    )
+    if export_rec.format == "geojson":
+        media_type = "application/geo+json"
+    elif export_rec.format in ("geopackage", "gpkg"):
+        media_type = "application/x-sqlite3"
+    elif export_rec.format == "zip":
+        media_type = "application/zip"
+    else:
+        media_type = "text/csv"
 
     return FileResponse(
         path=file_path,

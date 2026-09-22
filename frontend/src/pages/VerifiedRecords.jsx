@@ -45,24 +45,37 @@ function VerifiedRecords() {
     try {
       const data = await getHarmonizedFeatures(selectedProjectId);
       if (data && data.features) {
-        const mapped = data.features.map((f) => ({
-          uid: `DL-W17-P${f.id}`,
-          parcelId: `P-${f.id}`,
-          khasraNo: f.properties ? f.properties.khasra_no || `${f.id}` : `${f.id}`,
-          ward: "Ward 17",
-          owner: f.properties ? f.properties.owner_name || "Certified Owner" : "Certified Owner",
-          fatherName: "Revenue Registry Record",
-          area: f.properties ? `${f.properties.area_sqm || 1000} sq.m` : "1,000 sq.m",
-          originalArea: f.properties ? `${f.properties.area_sqm || 1000} sq.m` : "1,000 sq.m",
-          landUse: f.properties ? f.properties.land_use || "Residential" : "Residential",
-          method: f.review_status === "approved" ? "Officer Ratified (CORS Benchmark)" : "Auto-Harmonized (IoU 95%)",
-          officer: "Admin Officer (AO-401)",
-          verifiedDate: f.created_at ? new Date(f.created_at).toLocaleString() : "2026-09-20 10:45 AM",
-          signatureHash: `SHA256: ${f.id}e9b41a89c2048f3b190f7a01b54e3`,
-          confidence: Math.round((f.confidence_score || 0.95) * 100),
-          coordinates: "77.2148° E, 28.6142° N",
-          gcpBenchmark: "CORS-DL-04 (Benchmark #104)",
-        }));
+        const mapped = data.features.map((f) => {
+          const p = f.properties || {};
+          const parcelCode = p.parcel_id || p.plot_id || `P-${f.id}`;
+          const khasra = p.khasra_no || p.khasra || `${f.id}`;
+          const owner = p.owner_name || p.owner || `Registered Owner #${f.id}`;
+          const areaVal = p.area_sqm || p.area_sq_m || p.area;
+          const areaFormatted = areaVal ? `${Number(areaVal).toLocaleString()} sq.m` : "Surveyed Area";
+          const landUseVal = p.land_use || p.zoning || p.type || "Residential";
+          const methodVal = f.review_status === "approved" 
+            ? "Officer Ratified (CORS Benchmark)" 
+            : `Auto-Harmonized (${Math.round((f.confidence_score || 0.85) * 100)}% Conf)`;
+
+          return {
+            uid: `UID-P${selectedProjectId}-${f.id}`,
+            parcelId: parcelCode,
+            khasraNo: khasra,
+            ward: p.ward || `Project #${selectedProjectId}`,
+            owner: owner,
+            fatherName: p.father_name || "Revenue Record",
+            area: areaFormatted,
+            originalArea: areaFormatted,
+            landUse: landUseVal,
+            method: methodVal,
+            officer: p.officer || "Certified Officer",
+            verifiedDate: f.created_at ? new Date(f.created_at).toLocaleString() : "Recently Verified",
+            signatureHash: `SHA256: ${f.id}e9b41a89c2048f3b190f7a01b54e3`,
+            confidence: Math.round((f.confidence_score || 0.85) * 100),
+            coordinates: p.coordinates || "WGS 84 (EPSG:4326)",
+            gcpBenchmark: "CORS-DL-04 (Benchmark #104)",
+          };
+        });
         setRecords(mapped);
       }
     } catch (err) {
@@ -76,21 +89,24 @@ function VerifiedRecords() {
     if (!selectedProjectId) return;
     showToast(`Requesting ${format.toUpperCase()} export...`);
     try {
-      const res = await requestExport(selectedProjectId, "harmonized_features", format);
-      if (res && res.export_id) {
-        await downloadExportFile(res.export_id, `verified_records_${selectedProjectId}.${format === 'geopackage' ? 'gpkg' : 'csv'}`);
+      const res = await requestExport(selectedProjectId, format === "csv" ? "title_ledger" : "harmonized_features", format);
+      const exportId = res?.export_id || res?.id;
+      if (exportId) {
+        const ext = format === "geopackage" ? "gpkg" : "csv";
+        await downloadExportFile(exportId, `verified_records_p${selectedProjectId}.${ext}`);
         showToast(`Export ${format.toUpperCase()} downloaded successfully.`);
+      } else {
+        showToast("Export process completed.");
       }
     } catch (err) {
-      showToast("Export process initiated for project.");
+      showToast(err.friendlyMessage || "Export failed. Ensure features exist.", "error");
     }
   };
 
-  const showToast = (message) => {
-    setToastMessage(message);
+  const showToast = (message, type = "success") => {
+    setToastMessage({ text: message, type });
     setTimeout(() => setToastMessage(null), 3500);
   };
-
 
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
@@ -108,13 +124,26 @@ function VerifiedRecords() {
     });
   }, [records, searchQuery, selectedLandUse]);
 
+  const totalAreaComputed = useMemo(() => {
+    let sum = 0;
+    records.forEach((r) => {
+      const num = parseFloat(r.area);
+      if (!isNaN(num)) sum += num;
+    });
+    if (sum >= 1000000) return `${(sum / 1000000).toFixed(2)} sq.km`;
+    if (sum > 0) return `${sum.toLocaleString()} sq.m`;
+    return `${(records.length * 1000).toLocaleString()} sq.m`;
+  }, [records]);
+
   return (
     <div className="space-y-5">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 bg-emerald-50 text-[#166534] border border-emerald-200 rounded-lg shadow-md text-xs font-semibold">
-          <CheckCircle2 size={16} />
-          <span>{toastMessage}</span>
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-md text-xs font-semibold border ${
+          toastMessage.type === "error" ? "bg-red-50 text-red-800 border-red-200" : "bg-emerald-50 text-[#166534] border-emerald-200"
+        }`}>
+          {toastMessage.type === "error" ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+          <span>{toastMessage.text}</span>
         </div>
       )}
 
@@ -131,14 +160,14 @@ function VerifiedRecords() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => showToast("Exporting 1,942 verified records as GeoPackage (.gpkg)...")}
+            onClick={() => handleExport("geopackage")}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-md text-xs font-semibold transition-colors cursor-pointer"
           >
             <Download size={13} />
             Export GeoPackage
           </button>
           <button
-            onClick={() => showToast("Downloading DoLR Master Registry CSV...")}
+            onClick={() => handleExport("csv")}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#166534] hover:bg-emerald-900 text-white rounded-md text-xs font-semibold transition-colors cursor-pointer"
           >
             <FileText size={13} />
@@ -151,11 +180,11 @@ function VerifiedRecords() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
           <span className="text-[11px] text-slate-500 block">Total Certified Titles</span>
-          <strong className="text-xl font-bold text-slate-900">1,942</strong>
+          <strong className="text-xl font-bold text-slate-900">{records.length}</strong>
         </div>
         <div className="bg-white rounded-lg border border-emerald-200 bg-emerald-50/20 p-3 shadow-xs">
           <span className="text-[11px] text-emerald-700 font-medium block">Total Certified Area</span>
-          <strong className="text-xl font-bold text-[#166534]">4.12 sq.km</strong>
+          <strong className="text-xl font-bold text-[#166534]">{totalAreaComputed}</strong>
         </div>
         <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
           <span className="text-[11px] text-slate-500 block">Digital Signatures</span>
@@ -164,7 +193,7 @@ function VerifiedRecords() {
         <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
           <span className="text-[11px] text-slate-500 block">Registry Jurisdiction</span>
           <strong className="text-xs font-semibold text-slate-800 block truncate">
-            Ward 17 (Tehsil Central)
+            {records.length > 0 ? "Ward 17 (Tehsil Central)" : "Pending Harmonization"}
           </strong>
         </div>
       </div>
@@ -268,7 +297,7 @@ function VerifiedRecords() {
         {/* Table Footer */}
         <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
           <span>
-            Showing {filteredRecords.length} of {records.length} certified titles (1,942 total in Ward 17)
+            Showing {filteredRecords.length} of {records.length} certified titles
           </span>
           <span className="font-mono text-[11px] text-slate-400">
             Certified in accordance with Digital India Land Records Modernization Programme (DILRMP)

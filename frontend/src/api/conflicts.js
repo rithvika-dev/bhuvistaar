@@ -5,8 +5,8 @@ export const detectConflicts = async (projectId) => {
   return response.data;
 };
 
-export const listConflicts = async (projectId) => {
-  const response = await apiClient.get(`/conflict-results/${projectId}`);
+export const listConflicts = async (projectId, params = {}) => {
+  const response = await apiClient.get(`/conflict-results/${projectId}`, { params });
   return response.data;
 };
 
@@ -17,4 +17,3 @@ export const resolveConflict = async (conflictId, resolutionStatus, resolutionNo
   });
   return response.data;
 };
-

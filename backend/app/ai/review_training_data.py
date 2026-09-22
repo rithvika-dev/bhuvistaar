@@ -1,10 +1,13 @@
+import json
 import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.models.feature_match import FeatureMatch
+from app.ai.ml_feature_engineering import build_training_row
 
 
 FEATURE_COLUMNS = [
+    "identity_score",
     "spatial_score",
     "attribute_score",
     "geometry_similarity",
@@ -42,65 +45,37 @@ def collect_reviewed_matches(
         else:
             continue
 
-        spatial_score = float(
-            match.spatial_score or 0.0
+        spatial_score = float(match.spatial_score or 0.0)
+        attribute_score = float(match.attribute_score or 0.0)
+        geometry_similarity = float(match.geometry_similarity or 0.0)
+        proximity_score = float(match.proximity_score or 0.0)
+        distance = float(match.distance or 0.0)
+
+        identity_score = 0.5
+        if match.explanation:
+            try:
+                exp = json.loads(match.explanation)
+                if "identity_score" in exp:
+                    identity_score = float(exp["identity_score"])
+                elif "attribute_comparisons" in exp and exp["attribute_comparisons"]:
+                    for comp in exp["attribute_comparisons"]:
+                        if comp.get("is_identity"):
+                            identity_score = float(comp.get("similarity", 0.5))
+                            break
+            except Exception:
+                pass
+
+        row = build_training_row(
+            spatial_score=spatial_score,
+            attribute_score=attribute_score,
+            geometry_similarity=geometry_similarity,
+            proximity_score=proximity_score,
+            distance=distance,
+            identity_score=identity_score,
+            label=label
         )
 
-        attribute_score = float(
-            match.attribute_score or 0.0
-        )
-
-        geometry_similarity = float(
-            match.geometry_similarity or 0.0
-        )
-
-        proximity_score = float(
-            match.proximity_score or 0.0
-        )
-
-        distance = float(
-            match.distance or 0.0
-        )
-
-        distance_score = 1.0 / (
-            1.0 + distance
-        )
-
-        combined_score = (
-            spatial_score * 0.30
-            + attribute_score * 0.25
-            + geometry_similarity * 0.20
-            + proximity_score * 0.15
-            + distance_score * 0.10
-        )
-
-        rows.append(
-            {
-                "spatial_score":
-                    spatial_score,
-
-                "attribute_score":
-                    attribute_score,
-
-                "geometry_similarity":
-                    geometry_similarity,
-
-                "proximity_score":
-                    proximity_score,
-
-                "distance":
-                    distance,
-
-                "distance_score":
-                    distance_score,
-
-                "combined_score":
-                    combined_score,
-
-                "label":
-                    label
-            }
-        )
+        rows.append(row)
 
     dataframe = pd.DataFrame(rows)
 

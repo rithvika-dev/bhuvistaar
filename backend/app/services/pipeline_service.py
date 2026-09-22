@@ -6,9 +6,9 @@ Orchestrates the entire BhuVistaar data harmonization workflow:
   2. GIS Vector / Raster Inspection
   3. Metric CRS Projection & Feature Extraction
   4. Intelligent Feature Matching (Spatial + Attribute + ML)
-  5. Advanced Conflict Detection
+  5. Advanced Conflict Detection (Idempotent)
   6. Topology Validation
-  7. Attribute Mapping Suggestions
+  7. Attribute Mapping & Harmonized Feature Generation
   8. Provenance & Harmonization Readiness Summary
 
 Updates ProcessingJob progress at every step for complete status tracking.
@@ -25,7 +25,7 @@ from app.services.gis_pipeline import process_vector_dataset
 from app.services.matching_service import run_feature_matching
 from app.services.conflict_service import detect_conflicts
 from app.services.topology_service import validate_dataset_topology
-from app.services.harmonization_service import suggest_attribute_mappings
+from app.services.harmonized_feature_service import generate_harmonized_features
 from app.services.audit_service import create_audit_log
 
 
@@ -86,14 +86,18 @@ def start_pipeline(
         )
 
         # 5. Advanced conflict detection
-        update_pipeline_job(db, job, 70.0, "Detecting attribute, identity, geometry & duplicate conflicts...")
-        conflicts_result = detect_conflicts(db=db, project_id=project_id)
+        update_pipeline_job(db, job, 65.0, "Detecting attribute, identity, geometry & duplicate conflicts...")
+        conflicts_result = detect_conflicts(db=db, project_id=project_id, user_id=user_id)
 
         # 6. Topology validation
-        update_pipeline_job(db, job, 85.0, "Validating topology (gaps, overlaps, self-intersections)...")
+        update_pipeline_job(db, job, 80.0, "Validating topology (gaps, overlaps, self-intersections)...")
         topology_result = validate_dataset_topology(db=db, project_id=project_id, dataset_id=source_dataset_id)
 
-        # 7. Complete audit log
+        # 7. Generate harmonized features
+        update_pipeline_job(db, job, 90.0, "Generating unified harmonized features with provenance...")
+        harmonized_result = generate_harmonized_features(db=db, project_id=project_id)
+
+        # 8. Complete audit log
         create_audit_log(
             db=db,
             user_id=user_id,
@@ -117,7 +121,8 @@ def start_pipeline(
                 "target_feature_count": target_result.get("feature_count", 0),
                 "matches_found": matching_result.get("matches_found", 0),
                 "conflicts_detected": conflicts_result.get("conflicts_found", 0),
-                "topology_issues_detected": topology_result.get("validation_count", 0)
+                "topology_issues_detected": topology_result.get("validation_count", 0),
+                "harmonized_features_generated": harmonized_result.get("created_count", 0)
             },
             "completed_at": str(job.completed_at)
         }

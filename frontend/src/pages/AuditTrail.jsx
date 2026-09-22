@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getAuditLogs } from "../api/audit";
+import { requestExport, downloadExportFile } from "../api/exports";
 
 function AuditTrail() {
   const { selectedProjectId } = useAuth();
@@ -27,6 +28,7 @@ function AuditTrail() {
   const [selectedActor, setSelectedActor] = useState("all");
   const [toastMessage, setToastMessage] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const [auditEvents, setAuditEvents] = useState([]);
 
@@ -62,11 +64,33 @@ function AuditTrail() {
     }
   };
 
-  const showToast = (message) => {
-    setToastMessage(message);
+  const showToast = (message, type = "success") => {
+    setToastMessage({ text: message, type });
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const handleExport = async () => {
+    if (!selectedProjectId) {
+      showToast("Please select a project first.", "error");
+      return;
+    }
+    setExporting(true);
+    showToast("Generating audit log CSV export...");
+    try {
+      const res = await requestExport(selectedProjectId, "audit_logs", "csv");
+      const exportId = res?.export_id || res?.id;
+      if (exportId) {
+        await downloadExportFile(exportId, `audit_ledger_p${selectedProjectId}.csv`);
+        showToast("Audit ledger CSV downloaded successfully.");
+      } else {
+        showToast("Export generated.");
+      }
+    } catch (err) {
+      showToast(err.friendlyMessage || "Failed to export audit logs.", "error");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const filteredEvents = useMemo(() => {
     return auditEvents.filter((ev) => {
@@ -89,9 +113,11 @@ function AuditTrail() {
     <div className="space-y-5">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 bg-emerald-50 text-[#166534] border border-emerald-200 rounded-lg shadow-md text-xs font-semibold">
-          <CheckCircle2 size={16} />
-          <span>{toastMessage}</span>
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-md text-xs font-semibold border ${
+          toastMessage.type === "error" ? "bg-red-50 text-red-800 border-red-200" : "bg-emerald-50 text-[#166534] border-emerald-200"
+        }`}>
+          {toastMessage.type === "error" ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+          <span>{toastMessage.text}</span>
         </div>
       )}
 
@@ -107,8 +133,9 @@ function AuditTrail() {
         </div>
 
         <button
-          onClick={() => showToast("Exporting signed Audit Log as CSV / JSON...")}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#166534] hover:bg-emerald-900 text-white rounded-md text-xs font-semibold transition-colors cursor-pointer self-start"
+          onClick={handleExport}
+          disabled={exporting}
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#166534] hover:bg-emerald-900 text-white rounded-md text-xs font-semibold transition-colors cursor-pointer self-start disabled:opacity-50"
         >
           <Download size={13} />
           Export Audit Ledger
@@ -119,20 +146,20 @@ function AuditTrail() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
           <span className="text-[11px] text-slate-500 block">Total Ledger Entries</span>
-          <strong className="text-xl font-bold text-slate-900">4,812</strong>
+          <strong className="text-xl font-bold text-slate-900">{auditEvents.length}</strong>
         </div>
         <div className="bg-white rounded-lg border border-emerald-200 bg-emerald-50/20 p-3 shadow-xs">
           <span className="text-[11px] text-emerald-700 font-medium block">Integrity Status</span>
           <strong className="text-xl font-bold text-[#166534]">100% Sealed</strong>
         </div>
         <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
-          <span className="text-[11px] text-slate-500 block">Active Officers</span>
-          <strong className="text-xl font-bold text-slate-900">3 Operators</strong>
+          <span className="text-[11px] text-slate-500 block">Active Project ID</span>
+          <strong className="text-xl font-bold text-slate-900">Project #{selectedProjectId || "None"}</strong>
         </div>
         <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-xs">
           <span className="text-[11px] text-slate-500 block">Ledger Node ID</span>
           <strong className="font-mono text-xs text-slate-800 block truncate">
-            NODE-SIH26013-W17
+            NODE-SIH26013-P{selectedProjectId || "DEFAULT"}
           </strong>
         </div>
       </div>
