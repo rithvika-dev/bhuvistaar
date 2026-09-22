@@ -1,4 +1,4 @@
-﻿.venv/
+.venv/
 __pycache__/
 *.pyc
 node_modules/
@@ -12,4 +12,5 @@ coverage/
 backend/.pytest_cache/
 backend/uploads/
 backend/exports/
-frontend/node_modules/
+.venv-1/
+scratch/
